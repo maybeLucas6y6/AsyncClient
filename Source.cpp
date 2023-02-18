@@ -1,16 +1,18 @@
+#include "ExampleEnum.hpp"
+#include "Message.hpp"
 #include "Client.hpp"
 #include <iostream>
-#include <string>
+//#include <Windows.h>
 
 int main()
 {
-    char address[] = "127.0.0.1";
-    char port[] = "3000";
-    Client cln(address, port);
+    Client cln("127.0.0.1", "3003");
 
     // suspend main thread execution
-    std::string s;
-    while (getline(std::cin, s)) {
-        cln.RegisterMessage(s);
+    while (true) {
+        //Sleep(2000);
+        Message<ExampleEnum> msg;
+        msg << "12345";
+        cln.RegisterMessage(msg);
     }
 }
