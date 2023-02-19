@@ -8,8 +8,9 @@ Client::Client(const char* address, const char* port) :
 	writingThread([&] { writingContext.run(); })
 	//processingThread([&] { processingContext.run(); })
 {
+	//message.body.resize(32); // this should be changed
 	asio::co_spawn(writingContext, Connect(), asio::detached);
-	//asio::co_spawn(processingContext, WriteHeader(), asio::detached);
+	//asio::co_spawn(processingContext, ReadHeader(), asio::detached);
 }
 Client::~Client() {
 	writingContext.stop();
@@ -28,66 +29,80 @@ asio::awaitable<void> Client::Connect() {
 	}
 }
 asio::awaitable<void> Client::WriteHeader() {
-	while (!socket.is_open()) {
-		std::cout << "Connecting...\n";
-	}
 	while (true) {
 		messages.wait();
 		while (!messages.empty()) {
-			auto msg = messages.front();
-			messages.pop();
-			auto [error, n] = co_await asio::async_write(socket, asio::buffer(&msg.header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
+			auto [error, n] = co_await asio::async_write(socket, asio::buffer(&messages.front().header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
 			if (error) {
 				break;
 			}
 			else {
 				std::cout << "Sent header: " << n << " bytes\n";
-				if (msg.header.bodySize > 0) {
-					co_await WriteBody(std::move(msg));
+				if (messages.front().header.bodySize > 0) {
+					co_await WriteBody();
+				}
+				else {
+					messages.pop();
 				}
 			}
 		}
 	}
 }
-asio::awaitable<void> Client::WriteBody(Message<ExampleEnum> msg) {
-	auto [error, n] = co_await asio::async_write(socket, asio::buffer(&msg.body, msg.header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
+asio::awaitable<void> Client::WriteBody() {
+	auto [error, n] = co_await asio::async_write(socket, asio::buffer(messages.front().body.data(), messages.front().header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
 	if (error) {
 		std::cerr << error.message();
 	}
 	else {
-		
+		std::cout << "Sent " << n << " bytes: " << messages.front() << "\n";
+		ExampleStruct s{ 0,0 };
+		//message >> s;
+		std::vector<uint8_t> v = messages.front().body;
+		std::memcpy(&s, v.data(), sizeof(ExampleStruct));
+		std::cout << "Contents: " << s.a << " " << s.b << "\n";
 	}
+	messages.pop();
 }
 asio::awaitable<void> Client::ReadHeader() {
 	while (!socket.is_open()) {
 		std::cout << "Connecting...\n";
 	}
 	while (true) {
-		Message<ExampleEnum> msg;
-		auto [error, n] = co_await asio::async_read(socket, asio::buffer(&msg.header, sizeof(Message<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
+		Sleep(2000);
+		//Message<ExampleEnum> msg;
+		//messagesIn.push(std::move(msg));
+		auto [error, n] = co_await asio::async_read(socket, asio::buffer(&message.header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
 		if (error || n == 0) {
-			std::cerr << error.message();
+			std::cerr << error.message() << "*\n";
 			break;
 		}
 		else {
-			if (msg.header.bodySize > 0) {
-				msg.body.resize(msg.header.bodySize); // this should be changed
-				ReadBody(std::move(msg));
+			if (message.header.bodySize > 0) {
+				message.body.resize(message.header.bodySize); // this should be changed
+				co_await ReadBody();
 			}
 			else {
-				ProcessMessage(msg.body);
+				//ProcessMessage(msg.body);
+				//messagesIn.pop();
 			}
 		}
 	}
 }
-asio::awaitable<void> Client::ReadBody(Message<ExampleEnum> msg) {
-	auto [error, n] = co_await asio::async_read(socket, asio::buffer(&msg.body, msg.BodySize()), asio::experimental::as_tuple(asio::use_awaitable));
+asio::awaitable<void> Client::ReadBody() {
+	auto [error, n] = co_await asio::async_read(socket, asio::buffer(message.body.data(), message.header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
 	if (error || n == 0) {
 		std::cerr << error.message();
 	}
 	else {
-		ProcessMessage(msg.body);
+		std::cout << message;
+		/*for (auto& x : message.body) {
+			std::cout << x;
+		}*/
+		ExampleStruct s{0,0};
+		message >> s;
+		std::cout << "-" << s.a << "-" << s.b << "-";
 	}
+	//messagesIn.pop();
 }
 void Client::ProcessMessage(std::vector<uint8_t> data) {
 	for (auto& x : data) {
@@ -96,4 +111,10 @@ void Client::ProcessMessage(std::vector<uint8_t> data) {
 }
 void Client::RegisterMessage(Message<ExampleEnum> msg) {
 	messages.push(msg);
+
+	//ExampleStruct s{ 0,0 };
+	////message >> s;
+	//std::vector<uint8_t> v = messages.front().body;
+	//std::memcpy(&s, v.data(), sizeof(ExampleStruct));
+	//std::cout << "Contents: " << s.a << " " << s.b << "\n";
 }

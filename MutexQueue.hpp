@@ -13,7 +13,7 @@ private:
 public:
 	MutexQueue() = default;
 	MutexQueue(const MutexQueue<T>&) = delete;
-	const T& front()
+	const T& front() // was const
 	{
 		std::scoped_lock lock(mux);
 		return data.front();
