@@ -15,7 +15,6 @@ private:
 	asio::ip::tcp::socket socket;
 	asio::ip::basic_resolver_results<asio::ip::tcp> endpoints;
 	MutexQueue<Message<ExampleEnum>> messages;
-	//MutexQueue<Message<ExampleEnum>> messagesIn;
 	Message<ExampleEnum> message;
 public:
 	Client(const char* address, const char* port);

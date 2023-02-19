@@ -15,13 +15,6 @@ int main()
         msg.header.id = ExampleEnum::Three;
         ExampleStruct s{13,0};
         msg << s;
-
-        //ExampleStruct x{ 0,0 };
-        ////message >> s;
-        //std::vector<uint8_t> v = msg.body;
-        //std::memcpy(&x, v.data(), sizeof(ExampleStruct));
-        //std::cout << "Contents: " << x.a << " " << x.b << "\n";
-
         cln.RegisterMessage(std::move(msg));
     }
 }
