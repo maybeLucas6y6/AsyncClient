@@ -8,13 +8,14 @@ Client::Client(const char* address, const char* port) :
 	writingThread([&] { writingContext.run(); }),
 	processingThread([&] { processingContext.run(); })
 {
-	message.body.resize(32); // this should be changed
+	isConnected = false;
 	asio::co_spawn(writingContext, Connect(), asio::detached);
 	asio::co_spawn(processingContext, ReadHeader(), asio::detached);
 }
 Client::~Client() {
 	writingContext.stop();
 	processingContext.stop();
+	socket.cancel();
 	socket.close();
 	std::cout << "Disconnected\n";
 }
@@ -25,6 +26,7 @@ asio::awaitable<void> Client::Connect() {
 	}
 	else {
 		std::cout << "Connected\n";
+		isConnected = true;
 		co_await WriteHeader();
 	}
 }
@@ -34,6 +36,7 @@ asio::awaitable<void> Client::WriteHeader() {
 		while (!messages.empty()) {
 			auto [error, n] = co_await asio::async_write(socket, asio::buffer(&messages.front().header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
 			if (error) {
+				std::cerr << error.message() << "\n";
 				break;
 			}
 			else {
@@ -50,18 +53,19 @@ asio::awaitable<void> Client::WriteHeader() {
 asio::awaitable<void> Client::WriteBody() {
 	auto [error, n] = co_await asio::async_write(socket, asio::buffer(messages.front().body.data(), messages.front().header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
 	if (error) {
-		std::cerr << error.message();
+		std::cerr << error.message() << "\n";
 	}
 	else {
-		
+		//std::cout << "Sent " << n << " bytes: ";
+		ProcessMessage(messages.front());
 	}
 	messages.pop();
 }
 asio::awaitable<void> Client::ReadHeader() {
-	while (!socket.is_open()) {
+	while (!isConnected) {
 		std::cout << "Connecting...\n";
 	}
-	Sleep(2000); // solve this
+	//Sleep(2000); // solve this
 	while (true) {
 		auto [error, n] = co_await asio::async_read(socket, asio::buffer(&message.header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
 		if (error || n == 0) {
@@ -69,12 +73,13 @@ asio::awaitable<void> Client::ReadHeader() {
 			break;
 		}
 		else {
+			//std::cout << message << "\n";
 			if (message.header.bodySize > 0) {
-				message.body.resize(message.header.bodySize); // this should be changed
+				message.body.resize(message.header.bodySize);
 				co_await ReadBody();
 			}
 			else {
-				//ProcessMessage(msg.body);
+				ProcessMessage(message);
 			}
 		}
 	}
@@ -82,14 +87,16 @@ asio::awaitable<void> Client::ReadHeader() {
 asio::awaitable<void> Client::ReadBody() {
 	auto [error, n] = co_await asio::async_read(socket, asio::buffer(message.body.data(), message.header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
 	if (error || n == 0) {
-		std::cerr << error.message();
+		std::cerr << error.message() << "\n";
 	}
 	else {
-		//ProcessMessage(msg.body);
+		ProcessMessage(message);
 	}
 }
-void Client::ProcessMessage(std::vector<uint8_t> data) {
-	
+void Client::ProcessMessage(Message<ExampleEnum> msg) {
+	ExampleStruct s;
+	msg >> s;
+	std::cout << "Received: " << s.a << " " << s.b << "\n";
 }
 void Client::RegisterMessage(Message<ExampleEnum> msg) {
 	messages.push(msg);

@@ -16,6 +16,7 @@ private:
 	asio::ip::basic_resolver_results<asio::ip::tcp> endpoints;
 	MutexQueue<Message<ExampleEnum>> messages;
 	Message<ExampleEnum> message;
+	bool isConnected;
 public:
 	Client(const char* address, const char* port);
 	~Client();
@@ -25,5 +26,5 @@ public:
 	asio::awaitable<void> WriteHeader();
 	asio::awaitable<void> WriteBody();
 	void RegisterMessage(Message<ExampleEnum> msg);
-	void ProcessMessage(std::vector<uint8_t> data);
+	void ProcessMessage(Message<ExampleEnum> msg);
 };
