@@ -1,11 +1,10 @@
 #include "ExampleEnum.hpp"
-#include "Message.hpp"
 #include "Client.hpp"
-#include <iostream>
+#include "Message.hpp"
 
 int main()
 {
-    Client cln("127.0.0.1", "3000");
+    Client<ExampleEnum> cln("127.0.0.1", "3000");
 
     while (!cln.IsConnected()) {
         

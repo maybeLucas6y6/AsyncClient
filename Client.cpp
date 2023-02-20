@@ -2,7 +2,7 @@
 #include <asio/experimental/as_tuple.hpp>
 #include "Client.hpp"
 
-Client::Client(const char* address, const char* port) :
+template<class T> Client<T>::Client(const char* address, const char* port) :
 	socket(writingContext),
 	endpoints(asio::ip::tcp::resolver(writingContext).resolve(address, port)),
 	writingThread([&] { writingContext.run(); }),
@@ -12,7 +12,7 @@ Client::Client(const char* address, const char* port) :
 	asio::co_spawn(writingContext, Connect(), asio::detached);
 	asio::co_spawn(processingContext, ReadHeader(), asio::detached);
 }
-Client::~Client() {
+template<class T> Client<T>::~Client() {
 	writingContext.stop();
 	processingContext.stop();
 	socket.cancel();
@@ -20,13 +20,13 @@ Client::~Client() {
 	isConnected = false;
 	std::cout << "Disconnected\n";
 }
-bool Client::IsConnected() const {
+template<class T> bool Client<T>::IsConnected() const {
 	return isConnected;
 }
-void Client::RegisterMessage(const Message<ExampleEnum>& msg) {
+template<class T> void Client<T>::RegisterMessage(const Message<T>& msg) {
 	messages.push(msg);
 }
-asio::awaitable<void> Client::Connect() {
+template<class T> asio::awaitable<void> Client<T>::Connect() {
 	auto [error, result] = co_await asio::async_connect(socket, endpoints, asio::experimental::as_tuple(asio::use_awaitable));
 	if (error) {
 		// change stuff here regarding isConnected(timeout)
@@ -38,7 +38,7 @@ asio::awaitable<void> Client::Connect() {
 		co_await WriteHeader();
 	}
 }
-asio::awaitable<void> Client::WriteHeader() {
+template<class T> asio::awaitable<void> Client<T>::WriteHeader() {
 	while (isConnected) {
 		messages.wait();
 		while (!messages.empty()) {
@@ -61,7 +61,7 @@ asio::awaitable<void> Client::WriteHeader() {
 		}
 	}
 }
-asio::awaitable<void> Client::WriteBody() {
+template<class T> asio::awaitable<void> Client<T>::WriteBody() {
 	auto [error, n] = co_await asio::async_write(socket, asio::buffer(messages.front().body.data(), messages.front().header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
 	if (error) {
 		std::cerr << error.message() << "\n";
@@ -73,7 +73,7 @@ asio::awaitable<void> Client::WriteBody() {
 		ProcessMessage(messages.pop());
 	}
 }
-asio::awaitable<void> Client::ReadHeader() {
+template<class T> asio::awaitable<void> Client<T>::ReadHeader() {
 	while (!isConnected) {
 		std::cout << "Connecting...\n";
 	}
@@ -97,7 +97,7 @@ asio::awaitable<void> Client::ReadHeader() {
 		}
 	}
 }
-asio::awaitable<void> Client::ReadBody() {
+template<class T> asio::awaitable<void> Client<T>::ReadBody() {
 	auto [error, n] = co_await asio::async_read(socket, asio::buffer(message.body.data(), message.header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
 	if (error || n == 0) {
 		std::cerr << error.message() << "\n";
@@ -109,7 +109,7 @@ asio::awaitable<void> Client::ReadBody() {
 		ProcessMessage(message);
 	}
 }
-void Client::ProcessMessage(Message<ExampleEnum> msg) {
+template<class T> void Client<T>::ProcessMessage(Message<T> msg) {
 	ExampleStruct s;
 	msg >> s;
 	std::cout << "Processed: ";
