@@ -3,8 +3,7 @@
 #include <queue>
 #include <mutex>
 
-template <typename T>
-class MutexQueue {
+template <class T> class MutexQueue {
 private:
 	std::queue<T> data;
 	std::mutex mux;
@@ -13,39 +12,33 @@ private:
 public:
 	MutexQueue() = default;
 	MutexQueue(const MutexQueue<T>&) = delete;
-	const T& front()
-	{
+	const T& front() {
 		std::scoped_lock lock(mux);
 		return data.front();
 	}
-	T pop()
-	{
+	T pop() {
 		std::scoped_lock lock(mux);
 		auto t = std::move(data.back());
 		data.pop();
 		return t;
 	}
-	void push(const T& item)
-	{
+	void push(const T& item) {
 		std::scoped_lock lock(mux);
 		data.push(std::move(item));
 
 		std::unique_lock<std::mutex> ul(block);
 		condition.notify_one();
 	}
-	bool empty()
-	{
+	bool empty() {
 		std::scoped_lock lock(mux);
 		return data.empty();
 	}
-	size_t count()
-	{
+	size_t count() {
 		std::scoped_lock lock(mux);
 		return data.size();
 	}
 	// clear not implemented
-	void wait()
-	{
+	void wait()	{
 		while (empty())
 		{
 			std::unique_lock<std::mutex> ul(block);

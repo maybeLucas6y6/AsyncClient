@@ -1,4 +1,5 @@
 #include "ExampleEnum.hpp"
+#include "ExampleStruct.hpp"
 #include "Client.hpp"
 #include "Message.hpp"
 
@@ -10,7 +11,7 @@ int main()
         
     }
     while (cln.IsConnected()) {
-        Sleep(5);
+        Sleep(2);
         Message<ExampleEnum> msg;
         msg.header.id = ExampleEnum::Three;
         ExampleStruct s{13,0};

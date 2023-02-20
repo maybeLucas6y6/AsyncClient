@@ -4,15 +4,13 @@
 #include <vector>
 #include <iostream>
 
-template<class T>
-class MessageHeader {
+template<class T> class MessageHeader {
 public:
 	T id{};
 	uint32_t bodySize{};
 };
 
-template<class T>
-class Message {
+template<class T> class Message {
 public:
 	MessageHeader<T> header;
 	std::vector<uint8_t> body;
