@@ -28,6 +28,6 @@ public:
 	asio::awaitable<void> ReadBody();
 	asio::awaitable<void> WriteHeader();
 	asio::awaitable<void> WriteBody();
-	void RegisterMessage(Message<ExampleEnum> msg);
+	void RegisterMessage(const Message<ExampleEnum>& msg);
 	void ProcessMessage(Message<ExampleEnum> msg);
 };
