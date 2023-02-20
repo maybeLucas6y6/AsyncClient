@@ -1,17 +1,12 @@
 #pragma once
 
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define ASIO_STANDALONE
 #include <asio.hpp>
 #include <thread>
-#include "MutexQueue.hpp"
-#include "Message.hpp"
 #include "ExampleEnum.hpp"
+#include "Message.hpp"
+#include "MutexQueue.hpp"
 
 class Client {
-public:
-	bool isConnected;
-	MutexQueue<Message<ExampleEnum>> messages;
 private:
 	std::jthread writingThread;
 	asio::io_context writingContext;
@@ -20,14 +15,19 @@ private:
 	asio::ip::tcp::socket socket;
 	asio::ip::basic_resolver_results<asio::ip::tcp> endpoints;
 	Message<ExampleEnum> message;
+	MutexQueue<Message<ExampleEnum>> messages; // rename this
+	bool isConnected;
 public:
 	Client(const char* address, const char* port);
 	~Client();
+	bool IsConnected() const;
+	void RegisterMessage(const Message<ExampleEnum>& msg);
+private:
 	asio::awaitable<void> Connect();
-	asio::awaitable<void> ReadHeader();
-	asio::awaitable<void> ReadBody();
 	asio::awaitable<void> WriteHeader();
 	asio::awaitable<void> WriteBody();
-	void RegisterMessage(const Message<ExampleEnum>& msg);
+	asio::awaitable<void> ReadHeader();
+	asio::awaitable<void> ReadBody();
+protected:
 	void ProcessMessage(Message<ExampleEnum> msg);
 };
