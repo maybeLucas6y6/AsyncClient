@@ -5,13 +5,12 @@
 
 int main()
 {
-    Client<ExampleEnum> cln("127.0.0.1", "3000");
+    Client<ExampleEnum> cln("6.tcp.eu.ngrok.io", "18680");
 
     while (!cln.IsConnected()) {
-        
+        std::cout << "Connecting...\n";
     }
     while (cln.IsConnected()) {
-        Sleep(2);
         Message<ExampleEnum> msg;
         msg.header.id = ExampleEnum::Three;
         ExampleStruct s{13,0};

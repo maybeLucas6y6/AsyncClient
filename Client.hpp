@@ -7,21 +7,20 @@
 #include "Message.hpp"
 #include "MutexQueue.hpp"
 
-// TODO: fix sleep crash
-
 template<class T> class Client {
 private:
-	std::jthread writingThread;
-	asio::io_context writingContext;
-	std::jthread processingThread;
-	asio::io_context processingContext;
+	const char* address;
+	const char* port;
+	asio::io_context ctx;
+	std::jthread thr;
+	MutexQueue<Message<T>> incomingMessages;
+private:
 	asio::ip::tcp::socket socket;
-	asio::ip::basic_resolver_results<asio::ip::tcp> endpoints;
 	Message<T> message;
 	MutexQueue<Message<T>> messagesRegistered;
 	bool isConnected;
 public:
-	Client(const char* address, const char* port);
+	Client(const char* address_, const char* port_);
 	~Client();
 	bool IsConnected() const;
 	void RegisterMessage(const Message<T>& msg);
@@ -35,31 +34,33 @@ protected:
 	void ProcessMessage(Message<T> msg);
 };
 
-template<class T> Client<T>::Client(const char* address, const char* port) :
-	socket(writingContext),
-	endpoints(asio::ip::tcp::resolver(writingContext).resolve(address, port)),
-	writingThread([&] { writingContext.run(); }),
-	processingThread([&] { processingContext.run(); })
+template<class T> Client<T>::Client(const char* address_, const char* port_) :
+	socket(ctx),
+	address(address_),
+	port(port_),
+	thr([&]() { asio::co_spawn(ctx, Connect(), asio::detached); ctx.run(); })
 {
 	isConnected = false;
-	asio::co_spawn(writingContext, Connect(), asio::detached);
-	asio::co_spawn(processingContext, ReadHeader(), asio::detached);
 }
 template<class T> Client<T>::~Client() {
-	writingContext.stop();
-	processingContext.stop();
 	socket.cancel();
 	socket.close();
+	ctx.stop();
 	std::cout << "Disconnected\n";
 }
 template<class T> bool Client<T>::IsConnected() const {
 	return isConnected;
 }
 template<class T> void Client<T>::RegisterMessage(const Message<T>& msg) {
+	bool free = messagesRegistered.empty();
 	messagesRegistered.push(msg);
+	if (free) {
+		asio::co_spawn(ctx, WriteHeader(), asio::detached);
+	}
 }
 template<class T> asio::awaitable<void> Client<T>::Connect() {
-	auto [error, result] = co_await asio::async_connect(socket, endpoints, asio::experimental::as_tuple(asio::use_awaitable));
+	auto r = asio::ip::tcp::resolver(ctx).resolve(asio::ip::tcp::resolver::query(address, port));
+	auto [error, result] = co_await asio::async_connect(socket, r, asio::experimental::as_tuple(asio::use_awaitable));
 	if (error) {
 		// change stuff here regarding isConnected(timeout)
 		std::cerr << error.message();
@@ -67,33 +68,30 @@ template<class T> asio::awaitable<void> Client<T>::Connect() {
 	else {
 		std::cout << "Connected\n";
 		isConnected = true;
-		co_await WriteHeader();
+		co_await ReadHeader();
 	}
 }
 template<class T> asio::awaitable<void> Client<T>::WriteHeader() {
-	while (isConnected) {
-		messagesRegistered.wait();
-		while (!messagesRegistered.empty()) {
-			auto [error, n] = co_await asio::async_write(socket, asio::buffer(&messagesRegistered.front().header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
-			if (error) {
-				std::cerr << error.message() << "\n";
-				isConnected = false;
-				break;
+	while (!messagesRegistered.empty()) {
+		auto [error, n] = co_await asio::async_write(socket, asio::buffer(&messagesRegistered.front().header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
+		if (error || n == 0) {
+			std::cerr << error.message() << "\n";
+			isConnected = false;
+			break;
+		}
+		else {
+			if (messagesRegistered.front().header.bodySize > 0) {
+				co_await WriteBody();
 			}
 			else {
-				if (messagesRegistered.front().header.bodySize > 0) {
-					co_await WriteBody();
-				}
-				else {
-					ProcessMessage(messagesRegistered.pop());
-				}
+				ProcessMessage(messagesRegistered.pop());
 			}
 		}
 	}
 }
 template<class T> asio::awaitable<void> Client<T>::WriteBody() {
 	auto [error, n] = co_await asio::async_write(socket, asio::buffer(messagesRegistered.front().body.data(), messagesRegistered.front().header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
-	if (error) {
+	if (error || n == 0) {
 		std::cerr << error.message() << "\n";
 		isConnected = false;
 	}
@@ -102,11 +100,10 @@ template<class T> asio::awaitable<void> Client<T>::WriteBody() {
 	}
 }
 template<class T> asio::awaitable<void> Client<T>::ReadHeader() {
-	while (!isConnected) {
-		std::cout << "Connecting...\n";
-	}
 	while (isConnected) {
+		std::cout << "Waiting for header\n";
 		auto [error, n] = co_await asio::async_read(socket, asio::buffer(&message.header, sizeof(MessageHeader<ExampleEnum>)), asio::experimental::as_tuple(asio::use_awaitable));
+		std::cout << "Received header: " << n << " bytes: " << message.header.bodySize << "\n";
 		if (error || n == 0) {
 			std::cerr << error.message() << "\n";
 			isConnected = false;
@@ -124,7 +121,9 @@ template<class T> asio::awaitable<void> Client<T>::ReadHeader() {
 	}
 }
 template<class T> asio::awaitable<void> Client<T>::ReadBody() {
+	std::cout << "Waiting for body\n";
 	auto [error, n] = co_await asio::async_read(socket, asio::buffer(message.body.data(), message.header.bodySize), asio::experimental::as_tuple(asio::use_awaitable));
+	std::cout << "Received body: " << n << " bytes: " << message.BodySize() << "\n";
 	if (error || n == 0) {
 		std::cerr << error.message() << "\n";
 		isConnected = false;
